@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>LINE MOVER</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #080c0f;
+  --surface: #0e1419;
+  --surface2: #151d24;
+  --border: #1e2a33;
+  --over: #f97316;
+  --under: #38bdf8;
+  --neutral: #94a3b8;
+  --alert: #fb923c;
+  --text: #e2e8f0;
+  --muted: #475569;
+  --green: #4ade80;
+  --red: #f87171;
+  --font: 'Syne', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Noise texture overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 999;
+  opacity: 0.4;
+}
+
+/* ── Header ── */
+header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: rgba(8,12,15,0.95);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+
+.wordmark {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 5px;
+  color: var(--text);
+  text-transform: uppercase;
+}
+.wordmark em {
+  color: var(--over);
+  font-style: normal;
+}
+
+.status-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.pulse {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+.pulse.live { animation: heartbeat 2s ease infinite; }
+.pulse.dead { background: var(--red); animation: none; }
+@keyframes heartbeat {
+  0%,100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+  50% { transform: scale(1.2); opacity: 0.8; box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+}
+
+.ts {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+/* Odds usage pill */
+.usage-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.usage-pill.warn { border-color: rgba(249,115,22,0.4); color: var(--over); }
+.usage-pill.danger { border-color: rgba(248,113,113,0.4); color: var(--red); }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: 1;
+  min-width: 72px;
+  padding: 11px 6px;
+  text-align: center;
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.tab.active { color: var(--over); border-bottom-color: var(--over); }
+
+/* ── Setup banner ── */
+.setup-card {
+  margin: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px;
+}
+.setup-card h3 {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--over);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.setup-card p {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--neutral);
+  line-height: 1.7;
+  margin-bottom: 14px;
+}
+.setup-card a { color: var(--under); text-decoration: none; }
+.setup-card a:hover { text-decoration: underline; }
+
+.input-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.field {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field:focus { border-color: var(--over); }
+.field::placeholder { color: var(--muted); }
+
+.btn {
+  background: var(--over);
+  color: #000;
+  border: none;
+  font-family: var(--font);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 9px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.btn:active { opacity: 0.8; }
+.btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.btn.blue { background: var(--under); }
+
+/* ── Game cards ── */
+.games-wrap {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.game-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  position: relative;
+}
+.game-card:active { opacity: 0.9; }
+
+.game-card.move-over {
+  border-color: rgba(249,115,22,0.5);
+  box-shadow: 0 0 24px rgba(249,115,22,0.08);
+}
+.game-card.move-under {
+  border-color: rgba(56,189,248,0.5);
+  box-shadow: 0 0 24px rgba(56,189,248,0.08);
+}
+
+/* Alert flash strip */
+.flash-strip {
+  padding: 7px 14px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  animation: flashbg 1.2s ease infinite;
+}
+.flash-strip.over { background: rgba(249,115,22,0.12); color: var(--over); }
+.flash-strip.under { background: rgba(56,189,248,0.1); color: var(--under); }
+@keyframes flashbg {
+  0%,100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Card body */
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 13px 14px 8px;
+}
+
+.matchup-block {}
+.teams-line {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  line-height: 1.1;
+}
+.teams-line .sep { color: var(--muted); font-weight: 400; margin: 0 4px; }
+
+.league-chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 2px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+.league-chip.nba { background: rgba(56,189,248,0.1); color: var(--under); border: 1px solid rgba(56,189,248,0.2); }
+.league-chip.ncaab { background: rgba(249,115,22,0.1); color: var(--over); border: 1px solid rgba(249,115,22,0.2); }
+
+.game-clock {
+  text-align: right;
+}
+.clock-val {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--green);
+  line-height: 1;
+}
+.clock-period {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 3px;
+  letter-spacing: 1px;
+}
+
+/* Score row */
+.score-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+.score-val {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+.score-dash { color: var(--muted); font-size: 18px; font-family: var(--mono); }
+.score-total {
+  margin-left: auto;
+  text-align: right;
+}
+.score-total-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.score-total-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+/* Line movement section */
+.line-section {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px;
+}
+
+.line-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.line-group {
+  text-align: center;
+  flex: 1;
+}
+.line-group-label {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.line-group-val {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--text);
+}
+.line-group-val.open { color: var(--neutral); }
+
+.arrow-col {
+  flex: 0 0 40px;
+  text-align: center;
+  font-size: 22px;
+}
+
+/* Movement delta badge */
+.move-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0 auto;
+}
+.move-badge.over { background: rgba(249,115,22,0.15); color: var(--over); border: 1px solid rgba(249,115,22,0.3); }
+.move-badge.under { background: rgba(56,189,248,0.12); color: var(--under); border: 1px solid rgba(56,189,248,0.25); }
+.move-badge.flat { background: rgba(148,163,184,0.08); color: var(--muted); border: 1px solid var(--border); }
+
+/* Line track visual */
+.line-track-wrap {
+  position: relative;
+  padding: 8px 0 4px;
+}
+.line-track {
+  height: 3px;
+  background: var(--surface2);
+  border-radius: 2px;
+  position: relative;
+  overflow: visible;
+}
+.line-track-open {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 13px;
+  background: var(--neutral);
+  border-radius: 1px;
+  transform: translateX(-50%);
+}
+.line-track-open::after {
+  content: 'OPEN';
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 7px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.line-track-live {
+  position: absolute;
+  top: -5px;
+  width: 2px;
+  height: 13px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  transition: left 0.4s ease;
+}
+.line-track-live.over { background: var(--over); }
+.line-track-live.under { background: var(--under); }
+.line-track-live.flat { background: var(--neutral); }
+.line-track-live::after {
+  content: 'LIVE';
+  position: absolute;
+  bottom: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 7px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.line-track-live.over::after { color: var(--over); }
+.line-track-live.under::after { color: var(--under); }
+.line-track-live.flat::after { color: var(--muted); }
+
+/* Book count */
+.book-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+}
+.book-count {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+.source-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+.source-tag.live { color: var(--green); }
+.source-tag.cached { color: var(--muted); }
+
+/* ── Alert log ── */
+.alert-log {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.alert-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.alert-item.over { border-left: 3px solid var(--over); }
+.alert-item.under { border-left: 3px solid var(--under); }
+.alert-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.alert-game { font-weight: 800; font-size: 14px; }
+.alert-time { font-family: var(--mono); font-size: 9px; color: var(--muted); }
+.alert-detail { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+/* ── Settings panel ── */
+.settings-wrap { padding: 14px; }
+.setting-group { margin-bottom: 22px; }
+.setting-group h3 {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.setting-row label { font-size: 14px; font-weight: 700; color: var(--text); }
+.setting-row small {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+.setting-input {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  width: 85px;
+  text-align: right;
+  outline: none;
+}
+.setting-input:focus { border-color: var(--over); }
+
+/* Toggle */
+.toggle { position: relative; width: 42px; height: 23px; }
+.toggle input { display: none; }
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.toggle-track:before {
+  content: '';
+  position: absolute;
+  width: 17px; height: 17px;
+  left: 2px; top: 2px;
+  background: var(--muted);
+  border-radius: 50%;
+  transition: 0.2s;
+}
+.toggle input:checked + .toggle-track { background: rgba(249,115,22,0.2); border-color: var(--over); }
+.toggle input:checked + .toggle-track:before { transform: translateX(19px); background: var(--over); }
+
+/* Empty / loading */
+.empty {
+  text-align: center;
+  padding: 60px 30px;
+}
+.empty-icon { font-size: 42px; margin-bottom: 14px; }
+.empty h3 { font-size: 16px; font-weight: 800; letter-spacing: 2px; margin-bottom: 8px; }
+.empty p { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.7; }
+
+/* Refresh FAB */
+.fab {
+  position: fixed;
+  bottom: 22px; right: 18px;
+  width: 50px; height: 50px;
+  background: var(--over);
+  color: #000;
+  border: none;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 24px rgba(249,115,22,0.35);
+  z-index: 50;
+  transition: transform 0.15s;
+}
+.fab:active { transform: scale(0.9); }
+.fab.spin { animation: rotate 0.7s linear infinite; }
+@keyframes rotate { to { transform: rotate(360deg); } }
+
+/* Toast */
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  z-index: 500;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 90vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.panel { display: block; }
+.panel.hidden { display: none; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">LINE<em>MOVER</em></div>
+  <div class="status-cluster">
+    <div class="pulse-row">
+      <div class="pulse" id="pulseDot"></div>
+      <div class="ts" id="tsLabel">--:--</div>
+    </div>
+    <div class="usage-pill" id="usagePill">ODDS 0/500</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('games')">GAMES</div>
+  <div class="tab" onclick="switchTab('alerts')">ALERTS <span id="alertCount" style="display:none;background:var(--over);color:#000;border-radius:3px;padding:1px 5px;font-size:8px;margin-left:3px;"></span></div>
+  <div class="tab" onclick="switchTab('settings')">SETTINGS</div>
+</div>
+
+<!-- GAMES PANEL -->
+<div class="panel" id="panel-games">
+
+  <div id="setupCard" class="setup-card">
+    <h3>⚡ One Free API Key Needed</h3>
+    <p>
+      <strong style="color:var(--text)">the-odds-api.com</strong> — free tier, 500 req/month, no credit card.<br>
+      Provides opening + live O/U lines from multiple books.<br>
+      ESPN is used for live scores — no key required.<br><br>
+      <a href="https://the-odds-api.com" target="_blank">→ Get your free key at the-odds-api.com</a>
+    </p>
+    <div class="input-row">
+      <input class="field" id="oddsKeyInput" type="password" placeholder="Paste OddsAPI key here...">
+      <button class="btn" onclick="saveKey()">SAVE</button>
+      <button class="btn ghost" onclick="demoMode()">DEMO</button>
+    </div>
+  </div>
+
+  <div id="gamesWrap" class="games-wrap"></div>
+
+</div>
+
+<!-- ALERTS PANEL -->
+<div class="panel hidden" id="panel-alerts">
+  <div id="alertLog" class="alert-log">
+    <div class="empty">
+      <div class="empty-icon">📋</div>
+      <h3>NO ALERTS YET</h3>
+      <p>Line movement alerts will<br>appear here as they trigger.</p>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="panel hidden" id="panel-settings">
+  <div class="settings-wrap">
+
+    <div class="setting-group">
+      <h3>API</h3>
+      <div class="setting-row">
+        <div><label>OddsAPI Key</label><small id="keyStatus">Not set</small></div>
+        <button class="btn ghost" onclick="clearKey()" style="font-size:9px;padding:6px 10px;">CLEAR</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <label>Odds Usage</label>
+          <small id="oddsUsageDetail">0 of 500 free requests used today</small>
+        </div>
+        <button class="btn ghost" onclick="resetUsage()" style="font-size:9px;padding:6px 10px;">RESET</button>
+      </div>
+      <div class="setting-row">
+        <div>
+          <label>Poll Interval</label>
+          <small>Minutes between odds refresh (default 8)</small>
+        </div>
+        <input class="setting-input" id="pollMins" type="number" value="8" min="3" max="60">
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h3>Alerts</h3>
+      <div class="setting-row">
+        <div>
+          <label>Alert Threshold</label>
+          <small>Trigger when live O/U moves this many points from open</small>
+        </div>
+        <input class="setting-input" id="alertThresh" type="number" value="3" min="0.5" max="20" step="0.5">
+      </div>
+      <div class="setting-row">
+        <div>
+          <label>Push Notifications</label>
+          <small>Browser notification on alert</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="pushToggle" onchange="togglePush(this)">
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <label>Alert on OVER moves</label>
+          <small>Line moves up from open</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="overToggle" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div>
+          <label>Alert on UNDER moves</label>
+          <small>Line moves down from open</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="underToggle" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <h3>Leagues</h3>
+      <div class="setting-row">
+        <div><label>NBA</label></div>
+        <label class="toggle"><input type="checkbox" id="nbaOn" checked><div class="toggle-track"></div></label>
+      </div>
+      <div class="setting-row">
+        <div><label>NCAAB</label></div>
+        <label class="toggle"><input type="checkbox" id="ncaabOn" checked><div class="toggle-track"></div></label>
+      </div>
+    </div>
+
+    <button class="btn" style="width:100%;margin-top:4px;" onclick="saveSettings()">SAVE SETTINGS</button>
+    <button class="btn ghost" style="width:100%;margin-top:8px;" onclick="clearAlerts()">CLEAR ALERT LOG</button>
+
+  </div>
+</div>
+
+<button class="fab" id="fab" onclick="manualRefresh()">↻</button>
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════
+let oddsKey   = localStorage.getItem('lm_odds_key') || '';
+let isDemo    = localStorage.getItem('lm_demo') === 'true';
+let games     = {};        // eventId → game object
+let openLines = {};        // eventId → opening total (persisted)
+let alertLog  = JSON.parse(localStorage.getItem('lm_alerts') || '[]');
+let pollTimer = null;
+let lastPoll  = 0;
+
+// Usage counter (resets daily)
+function todayKey() { return new Date().toISOString().split('T')[0]; }
+function getUsage() {
+  try {
+    const u = JSON.parse(localStorage.getItem('lm_usage') || '{}');
+    if (u.date !== todayKey()) return { date: todayKey(), calls: 0 };
+    return u;
+  } catch(e) { return { date: todayKey(), calls: 0 }; }
+}
+function bumpUsage(n = 1) {
+  const u = getUsage();
+  u.calls += n;
+  localStorage.setItem('lm_usage', JSON.stringify(u));
+  renderUsage();
+}
+function resetUsage() {
+  localStorage.setItem('lm_usage', JSON.stringify({ date: todayKey(), calls: 0 }));
+  renderUsage();
+  toast('Usage counter reset');
+}
+function usageOk(needed = 1) {
+  if (isDemo) return true;
+  const limit = 480; // hard stop at 480 of 500 free calls
+  const u = getUsage();
+  if (u.calls + needed > limit) {
+    toast(`⛔ Free tier cap reached (${u.calls}/500) — polls paused`);
+    stopPoll();
+    setDot(false);
+    return false;
+  }
+  return true;
+}
+function renderUsage() {
+  const u = getUsage();
+  const calls = u.calls;
+  const pill = document.getElementById('usagePill');
+  const detail = document.getElementById('oddsUsageDetail');
+  if (pill) {
+    pill.textContent = `ODDS ${calls}/500`;
+    pill.className = 'usage-pill' + (calls >= 450 ? ' danger' : calls >= 300 ? ' warn' : '');
+  }
+  if (detail) detail.textContent = `${calls} of 500 free requests used today`;
+}
+
+// ════════════════════════════════════════════════
+// OPEN LINE PERSISTENCE
+// ════════════════════════════════════════════════
+function loadOpenLines() {
+  try { openLines = JSON.parse(localStorage.getItem('lm_open_lines') || '{}'); } catch(e) { openLines = {}; }
+}
+function saveOpenLine(id, total, ts) {
+  openLines[id] = { total, ts };
+  localStorage.setItem('lm_open_lines', JSON.stringify(openLines));
+}
+function pruneOpenLines() {
+  // Remove open lines older than 24h to keep storage clean
+  const now = Date.now();
+  for (const id of Object.keys(openLines)) {
+    if (now - openLines[id].ts > 86400000) delete openLines[id];
+  }
+  localStorage.setItem('lm_open_lines', JSON.stringify(openLines));
+}
+
+// ════════════════════════════════════════════════
+// ESPN LIVE SCORES (free, no key)
+// ════════════════════════════════════════════════
+async function fetchESPNScores(league) {
+  // league: 'nba' or 'mens-college-basketball'
+  const slug = league === 'nba' ? 'nba' : 'mens-college-basketball';
+  const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/${slug}/scoreboard`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.events || []).map(e => {
+      const comp = e.competitions?.[0];
+      const status = comp?.status;
+      const home = comp?.competitors?.find(t => t.homeAway === 'home');
+      const away = comp?.competitors?.find(t => t.homeAway === 'away');
+      return {
+        espnId: e.id,
+        league: league === 'nba' ? 'NBA' : 'NCAAB',
+        homeAbbr: home?.team?.abbreviation || '',
+        awayAbbr: away?.team?.abbreviation || '',
+        homeName: home?.team?.displayName || '',
+        awayName: away?.team?.displayName || '',
+        homeScore: parseInt(home?.score) || 0,
+        awayScore: parseInt(away?.score) || 0,
+        period: status?.period || 0,
+        clock: status?.displayClock || '',
+        // 1=pre, 2=in, 3=post
+        state: status?.type?.state || 'pre',
+        statusDesc: status?.type?.shortDetail || '',
+      };
+    });
+  } catch(e) { return []; }
+}
+
+// ════════════════════════════════════════════════
+// ODDS API (free tier — totals)
+// ════════════════════════════════════════════════
+async function fetchOdds(sportKey) {
+  if (!usageOk(1)) return [];
+  try {
+    const url = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?apiKey=${oddsKey}&regions=us&markets=totals&oddsFormat=american`;
+    const res = await fetch(url);
+    if (!res.ok) { toast(`Odds error ${res.status}`); return []; }
+    bumpUsage(1);
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map(ev => {
+      const totals = [];
+      for (const book of ev.bookmakers || []) {
+        const mkt = book.markets?.find(m => m.key === 'totals');
+        if (mkt) {
+          const over = mkt.outcomes?.find(o => o.name === 'Over');
+          if (over?.point) totals.push(over.point);
+        }
+      }
+      totals.sort((a,b) => a - b);
+      const median = totals.length ? totals[Math.floor(totals.length / 2)] : null;
+      return {
+        id: ev.id,
+        home: ev.home_team,
+        away: ev.away_team,
+        commenceTime: ev.commence_time,
+        total: median,
+        books: totals.length,
+        allTotals: totals,
+      };
+    }).filter(e => e.total !== null);
+  } catch(e) { toast('Odds fetch failed'); return []; }
+}
+
+// Fuzzy match ESPN team name → Odds API team name
+function teamMatch(espnName, oddsName) {
+  const clean = s => s.toLowerCase().replace(/[^a-z0-9]/g,' ').trim();
+  const a = clean(espnName), b = clean(oddsName);
+  // Check if any word in a appears in b or vice versa (last word = city/mascot)
+  const wordsA = a.split(' ').filter(w => w.length > 3);
+  const wordsB = b.split(' ').filter(w => w.length > 3);
+  return wordsA.some(w => b.includes(w)) || wordsB.some(w => a.includes(w));
+}
+
+function findOddsMatch(espnGame, oddsList) {
+  return oddsList.find(o =>
+    (teamMatch(espnGame.homeName, o.home) || teamMatch(espnGame.homeAbbr, o.home)) &&
+    (teamMatch(espnGame.awayName, o.away) || teamMatch(espnGame.awayAbbr, o.away))
+  ) || oddsList.find(o =>
+    teamMatch(espnGame.homeName, o.home) || teamMatch(espnGame.homeName, o.away)
+  );
+}
+
+// ════════════════════════════════════════════════
+// MAIN REFRESH
+// ════════════════════════════════════════════════
+async function refresh(force = false) {
+  if (!oddsKey && !isDemo) return;
+  const now = Date.now();
+  const pollMs = (parseInt(document.getElementById('pollMins')?.value) || 8) * 60000;
+  if (!force && now - lastPoll < pollMs) { renderGames(); return; }
+  lastPoll = now;
+
+  setFabSpin(true);
+  setDot(true);
+
+  if (isDemo) {
+    injectDemoGames();
+    setFabSpin(false);
+    updateTs();
+    return;
+  }
+
+  // 1. Fetch ESPN scores (free, no rate limit)
+  const leagues = [];
+  if (document.getElementById('nbaOn')?.checked !== false) leagues.push('nba');
+  if (document.getElementById('ncaabOn')?.checked) leagues.push('mens-college-basketball');
+
+  const espnResults = (await Promise.all(leagues.map(fetchESPNScores))).flat();
+  const liveESPN = espnResults.filter(g => g.state === 'in');
+
+  // 2. Fetch odds for active leagues (1-2 calls total)
+  const oddsResults = [];
+  if (document.getElementById('nbaOn')?.checked !== false) {
+    const o = await fetchOdds('basketball_nba');
+    oddsResults.push(...o);
+  }
+  if (document.getElementById('ncaabOn')?.checked) {
+    const o = await fetchOdds('basketball_ncaab');
+    oddsResults.push(...o);
+  }
+
+  // 3. Match and merge
+  for (const eg of liveESPN) {
+    const match = findOddsMatch(eg, oddsResults);
+    if (!match) continue;
+
+    const id = match.id;
+
+    // Store opening line on first sight
+    if (!openLines[id]) {
+      saveOpenLine(id, match.total, Date.now());
+    }
+
+    const openTotal = openLines[id]?.total || match.total;
+    const liveTotal = match.total;
+    const move = liveTotal - openTotal;
+    const dir = Math.abs(move) < 0.25 ? 'flat' : move > 0 ? 'over' : 'under';
+
+    games[id] = {
+      id,
+      league: eg.league,
+      home: eg.homeAbbr,
+      away: eg.awayAbbr,
+      homeName: eg.homeName,
+      awayName: eg.awayName,
+      homeScore: eg.homeScore,
+      awayScore: eg.awayScore,
+      period: eg.period,
+      clock: eg.clock,
+      statusDesc: eg.statusDesc,
+      openTotal,
+      liveTotal,
+      move: parseFloat(move.toFixed(1)),
+      dir,
+      books: match.books,
+      allTotals: match.allTotals,
+      ts: Date.now(),
+    };
+
+    // Trigger alert?
+    const thresh = parseFloat(document.getElementById('alertThresh')?.value) || 3;
+    const doOver  = document.getElementById('overToggle')?.checked !== false;
+    const doUnder = document.getElementById('underToggle')?.checked !== false;
+    const shouldAlert = Math.abs(move) >= thresh &&
+      ((dir === 'over' && doOver) || (dir === 'under' && doUnder));
+
+    if (shouldAlert) {
+      const existing = alertLog.find(a => a.id === id && a.dir === dir &&
+        Math.abs(a.move - move) < 0.5);
+      if (!existing) {
+        const entry = {
+          id, dir,
+          game: `${eg.awayAbbr} @ ${eg.homeAbbr}`,
+          move,
+          openTotal,
+          liveTotal,
+          period: eg.period,
+          clock: eg.clock,
+          league: eg.league,
+          ts: new Date().toLocaleTimeString(),
+        };
+        alertLog.unshift(entry);
+        if (alertLog.length > 50) alertLog.pop();
+        localStorage.setItem('lm_alerts', JSON.stringify(alertLog));
+        fireNotification(entry);
+        updateAlertBadge();
+      }
+    }
+  }
+
+  pruneOpenLines();
+  renderGames();
+  renderAlertLog();
+  setFabSpin(false);
+  updateTs();
+  renderUsage();
+}
+
+// ════════════════════════════════════════════════
+// DEMO MODE
+// ════════════════════════════════════════════════
+function injectDemoGames() {
+  const demo = [
+    { id:'d1', league:'NBA', home:'BOS', away:'GSW', homeName:'Boston Celtics', awayName:'Golden State Warriors',
+      homeScore:67, awayScore:71, period:3, clock:'4:22', statusDesc:'3rd Qtr',
+      openTotal:228.5, liveTotal:237.5, books:12 },
+    { id:'d2', league:'NBA', home:'LAL', away:'MIL', homeName:'Los Angeles Lakers', awayName:'Milwaukee Bucks',
+      homeScore:44, awayScore:59, period:3, clock:'8:11', statusDesc:'3rd Qtr',
+      openTotal:222.0, liveTotal:214.5, books:10 },
+    { id:'d3', league:'NCAAB', home:'DUKE', away:'UNC', homeName:'Duke Blue Devils', awayName:'North Carolina Tar Heels',
+      homeScore:55, awayScore:48, period:2, clock:'11:30', statusDesc:'2nd Half',
+      openTotal:155.5, liveTotal:161.0, books:8 },
+    { id:'d4', league:'NCAAB', home:'KU', away:'UK', homeName:'Kansas Jayhawks', awayName:'Kentucky Wildcats',
+      homeScore:31, awayScore:28, period:1, clock:'14:00', statusDesc:'1st Half',
+      openTotal:148.5, liveTotal:148.5, books:6 },
+  ];
+
+  const thresh = parseFloat(document.getElementById('alertThresh')?.value) || 3;
+
+  demo.forEach(g => {
+    const move = parseFloat((g.liveTotal - g.openTotal).toFixed(1));
+    const dir = Math.abs(move) < 0.25 ? 'flat' : move > 0 ? 'over' : 'under';
+    games[g.id] = { ...g, move, dir };
+    if (!openLines[g.id]) saveOpenLine(g.id, g.openTotal, Date.now());
+
+    if (Math.abs(move) >= thresh) {
+      const existing = alertLog.find(a => a.id === g.id);
+      if (!existing) {
+        const entry = { id: g.id, dir, game: `${g.away} @ ${g.home}`, move,
+          openTotal: g.openTotal, liveTotal: g.liveTotal, period: g.period,
+          clock: g.clock, league: g.league, ts: new Date().toLocaleTimeString() };
+        alertLog.unshift(entry);
+        localStorage.setItem('lm_alerts', JSON.stringify(alertLog));
+      }
+    }
+  });
+
+  renderGames();
+  renderAlertLog();
+  setFabSpin(false);
+  updateTs();
+  updateAlertBadge();
+}
+
+// ════════════════════════════════════════════════
+// RENDERING
+// ════════════════════════════════════════════════
+function renderGames() {
+  const wrap = document.getElementById('gamesWrap');
+  const list = Object.values(games);
+
+  if (!list.length) {
+    wrap.innerHTML = `<div class="empty">
+      <div class="empty-icon">🏀</div>
+      <h3>NO LIVE GAMES</h3>
+      <p>Live games with O/U lines<br>will appear here automatically.<br><br>
+      ${oddsKey || isDemo ? 'Waiting for games to start.' : 'Add your free OddsAPI key above.'}</p>
+    </div>`;
+    return;
+  }
+
+  // Sort: biggest moves first
+  list.sort((a,b) => Math.abs(b.move) - Math.abs(a.move));
+
+  wrap.innerHTML = list.map(g => {
+    const thresh = parseFloat(document.getElementById('alertThresh')?.value) || 3;
+    const isAlert = Math.abs(g.move) >= thresh;
+    const moveStr = g.move > 0 ? `+${g.move}` : `${g.move}`;
+
+    // Track position on the visual line
+    // Range: openTotal ± 15 pts displayed
+    const range = 20;
+    const mid = g.openTotal;
+    const openPct = 50; // open line always at 50%
+    const livePct = Math.min(95, Math.max(5, 50 + ((g.liveTotal - mid) / range * 50)));
+
+    const periodLabel = g.league === 'NCAAB'
+      ? (g.period === 1 ? '1ST HALF' : '2ND HALF')
+      : `Q${g.period}`;
+
+    return `
+    <div class="game-card ${isAlert ? 'move-' + g.dir : ''}" onclick="openDetail('${g.id}')">
+
+      ${isAlert ? `<div class="flash-strip ${g.dir}">
+        ${g.dir === 'over' ? '▲ TOTAL RISING' : '▼ TOTAL DROPPING'} &nbsp;·&nbsp;
+        OPEN ${g.openTotal} → LIVE ${g.liveTotal}
+      </div>` : ''}
+
+      <div class="card-head">
+        <div class="matchup-block">
+          <div class="teams-line">
+            ${g.away}<span class="sep">@</span>${g.home}
+          </div>
+          <span class="league-chip ${g.league.toLowerCase()}">${g.league}</span>
+        </div>
+        <div class="game-clock">
+          <div class="clock-val">${g.clock || '--'}</div>
+          <div class="clock-period">${periodLabel}</div>
+        </div>
+      </div>
+
+      <div class="score-row">
+        <div class="score-val">${g.awayScore}</div>
+        <div class="score-dash">–</div>
+        <div class="score-val">${g.homeScore}</div>
+        <div class="score-total">
+          <div class="score-total-label">COMBINED</div>
+          <div class="score-total-val">${g.homeScore + g.awayScore}</div>
+        </div>
+      </div>
+
+      <div class="line-section">
+        <div class="line-row">
+          <div class="line-group">
+            <div class="line-group-label">OPEN</div>
+            <div class="line-group-val open">${g.openTotal}</div>
+          </div>
+          <div class="arrow-col">
+            ${g.dir === 'over' ? '<span style="color:var(--over)">↑</span>' :
+              g.dir === 'under' ? '<span style="color:var(--under)">↓</span>' :
+              '<span style="color:var(--muted)">→</span>'}
+          </div>
+          <div class="line-group">
+            <div class="line-group-label">LIVE</div>
+            <div class="line-group-val" style="color:${g.dir==='over'?'var(--over)':g.dir==='under'?'var(--under)':'var(--neutral)'}">${g.liveTotal}</div>
+          </div>
+          <div class="arrow-col"></div>
+          <div class="line-group">
+            <div class="line-group-label">MOVE</div>
+            <div>
+              <span class="move-badge ${g.dir}">${moveStr}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="line-track-wrap">
+          <div class="line-track">
+            <div class="line-track-open" style="left:${openPct}%"></div>
+            <div class="line-track-live ${g.dir}" style="left:${livePct}%"></div>
+          </div>
+        </div>
+
+        <div class="book-row">
+          <div class="book-count">${g.books} BOOKS CONSENSUS</div>
+          <div class="source-tag ${Date.now() - (g.ts||0) < 600000 ? 'live' : 'cached'}">
+            ${Date.now() - (g.ts||0) < 600000 ? '● LIVE' : '○ CACHED'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderAlertLog() {
+  const wrap = document.getElementById('alertLog');
+  if (!alertLog.length) {
+    wrap.innerHTML = `<div class="empty">
+      <div class="empty-icon">📋</div><h3>NO ALERTS YET</h3>
+      <p>Line movement alerts will<br>appear here as they trigger.</p>
+    </div>`;
+    return;
+  }
+  wrap.innerHTML = alertLog.map(a => `
+    <div class="alert-item ${a.dir}">
+      <div class="alert-top">
+        <div class="alert-game">${a.game}</div>
+        <div class="alert-time">${a.ts}</div>
+      </div>
+      <div class="alert-detail">
+        <span style="color:var(--text)">${a.league}</span> ·
+        ${a.dir === 'over' ? '▲ OVER MOVE' : '▼ UNDER MOVE'} ·
+        ${a.move > 0 ? '+' : ''}${a.move} pts<br>
+        OPEN ${a.openTotal} → LIVE ${a.liveTotal} ·
+        ${a.period ? (a.league === 'NCAAB' ? (a.period===1?'1ST HALF':'2ND HALF') : `Q${a.period}`) : ''} ${a.clock || ''}
+      </div>
+    </div>
+  `).join('');
+  updateAlertBadge();
+}
+
+function updateAlertBadge() {
+  const badge = document.getElementById('alertCount');
+  if (!badge) return;
+  if (alertLog.length) {
+    badge.textContent = alertLog.length > 9 ? '9+' : alertLog.length;
+    badge.style.display = 'inline';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Detail view (inline expansion — tap card again to close)
+let expandedId = null;
+function openDetail(id) {
+  // For now, just navigate to alerts if this game has an alert
+  const a = alertLog.find(x => x.id === id);
+  if (a) { switchTab('alerts'); }
+}
+
+// ════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['games','alerts','settings'][i] === tab);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+  document.getElementById('panel-' + tab).classList.remove('hidden');
+}
+
+function setDot(on) {
+  const d = document.getElementById('pulseDot');
+  if (!d) return;
+  d.className = 'pulse ' + (on ? 'live' : 'dead');
+}
+
+function updateTs() {
+  const el = document.getElementById('tsLabel');
+  if (el) el.textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+
+function setFabSpin(on) {
+  document.getElementById('fab')?.classList.toggle('spin', on);
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function fireNotification(entry) {
+  if (Notification.permission === 'granted') {
+    new Notification(`🏀 LINE MOVE: ${entry.game}`, {
+      body: `${entry.dir === 'over' ? '▲' : '▼'} ${entry.move > 0 ? '+' : ''}${entry.move} pts · Open ${entry.openTotal} → Live ${entry.liveTotal}`,
+    });
+  }
+}
+
+function togglePush(el) {
+  if (el.checked && Notification.permission !== 'granted') {
+    Notification.requestPermission().then(p => {
+      if (p !== 'granted') { el.checked = false; toast('Notifications blocked'); }
+      else toast('Push notifications enabled');
+    });
+  }
+}
+
+function saveKey() {
+  const k = document.getElementById('oddsKeyInput')?.value.trim();
+  if (!k) { toast('Paste your OddsAPI key first'); return; }
+  oddsKey = k;
+  localStorage.setItem('lm_odds_key', k);
+  isDemo = false;
+  localStorage.removeItem('lm_demo');
+  document.getElementById('setupCard').style.display = 'none';
+  document.getElementById('keyStatus').textContent = 'Connected ●';
+  document.getElementById('keyStatus').style.color = 'var(--green)';
+  toast('Key saved — fetching now');
+  refresh(true);
+}
+
+function clearKey() {
+  oddsKey = '';
+  localStorage.removeItem('lm_odds_key');
+  isDemo = false;
+  localStorage.removeItem('lm_demo');
+  games = {};
+  document.getElementById('setupCard').style.display = 'block';
+  document.getElementById('keyStatus').textContent = 'Not set';
+  document.getElementById('keyStatus').style.color = '';
+  toast('Key cleared');
+  renderGames();
+}
+
+function demoMode() {
+  isDemo = true;
+  localStorage.setItem('lm_demo', 'true');
+  document.getElementById('setupCard').style.display = 'none';
+  toast('Demo mode — showing sample data');
+  injectDemoGames();
+  // Animate demo movement every 8s
+  setInterval(() => {
+    if (!isDemo) return;
+    Object.values(games).forEach(g => {
+      const jitter = (Math.random() - 0.48) * 0.5;
+      g.liveTotal = parseFloat((g.liveTotal + jitter).toFixed(1));
+      g.move = parseFloat((g.liveTotal - g.openTotal).toFixed(1));
+      g.dir = Math.abs(g.move) < 0.25 ? 'flat' : g.move > 0 ? 'over' : 'under';
+      g.ts = Date.now();
+    });
+    renderGames();
+  }, 8000);
+}
+
+function saveSettings() {
+  startPoll(); // restart with new interval
+  toast('Settings saved');
+}
+
+function clearAlerts() {
+  alertLog = [];
+  localStorage.removeItem('lm_alerts');
+  renderAlertLog();
+  updateAlertBadge();
+  toast('Alert log cleared');
+}
+
+function manualRefresh() {
+  lastPoll = 0; // force fetch regardless of interval
+  refresh(true);
+}
+
+// ════════════════════════════════════════════════
+// POLLING
+// ════════════════════════════════════════════════
+function startPoll() {
+  if (pollTimer) clearInterval(pollTimer);
+  const ms = (parseInt(document.getElementById('pollMins')?.value) || 8) * 60000;
+  pollTimer = setInterval(() => refresh(), ms);
+}
+
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════
+(function init() {
+  loadOpenLines();
+  renderUsage();
+  renderAlertLog();
+  updateAlertBadge();
+
+  if (oddsKey) {
+    document.getElementById('setupCard').style.display = 'none';
+    document.getElementById('keyStatus').textContent = 'Connected ●';
+    document.getElementById('keyStatus').style.color = 'var(--green)';
+    refresh(true);
+  }
+
+  if (isDemo) {
+    document.getElementById('setupCard').style.display = 'none';
+    injectDemoGames();
+    setInterval(() => {
+      if (!isDemo) return;
+      Object.values(games).forEach(g => {
+        const jitter = (Math.random() - 0.48) * 0.5;
+        g.liveTotal = parseFloat((g.liveTotal + jitter).toFixed(1));
+        g.move = parseFloat((g.liveTotal - g.openTotal).toFixed(1));
+        g.dir = Math.abs(g.move) < 0.25 ? 'flat' : g.move > 0 ? 'over' : 'under';
+        g.ts = Date.now();
+      });
+      renderGames();
+    }, 8000);
+  }
+
+  startPoll();
+})();
+</script>
+</body>
+</html>
